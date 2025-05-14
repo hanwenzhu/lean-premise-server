@@ -1,0 +1,12 @@
+.DS_Store
+
+# Premise selection server
+/data/
+/stress_test.py
+/secrets/
+
+# Python.gitignore
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
