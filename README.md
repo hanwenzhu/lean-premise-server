@@ -24,15 +24,33 @@ which runs a uvicorn server on `http://0.0.0.0:80`.
 
 ## Overview
 
-`docker-compose.yaml` contains two services: `embed` which runs a TEI instance on one GPU;
-and `app` which runs a FastAPI ASGI server (single worker), that handles incoming retrieval requests,
-determines the state and the premises that need to be embedded (for the premises not already in LRU cache),
-and sends these embedding requests to `embed` (while also maintaining a rate-limiter via
-`EMBED_SERVICE_MAX_CONCURRENT_INPUTS` so it doesn't send too many requests to `embed`),
+`docker-compose.yaml` contains two services:
+
+* `embed` runs a Hugging Face text-embeddings-inference (TEI) instance on one GPU;
+* `app` runs a FastAPI ASGI server, that handles incoming retrieval requests,
+determines the state and the premises that need to be embedded,
+sends these embedding requests to `embed`,
 and finally uses FAISS to retrieve the premises to return to the user.
 
+`app` uses a single uvicorn worker and handles concurrency using ASGI and `async`/`await`.
+`app` maintains a LRU cache of the embeddings of new premises, so it only
+relays to `embed` the requests of new premises it has not seen before.
+`app` also maintains a rate-limiter via
+`EMBED_SERVICE_MAX_CONCURRENT_INPUTS` so it doesn't send too many requests to `embed`.
+
+## Development
+
+Most design decisions for the code are subject to improvement or refactoring. These include but are not limited to:
+* Choice of using FAISS (CPU)
+* Choice of using Hugging Face text-embeddings-inference
+* Optimization (LRU cache) and rate-limiting code
+* Using a single GPU (versus multiple GPUs or no GPUs)
+* Pipeline from starting training to obtaining a new model and precomputed embeddings to server update (TODO documentation on this)
+* Choice of the numbers in `.env`
+
 The assumption for this server is single GPU, single univorn worker (utilizing ASGI).
-In the future, for scaling, I guess one should make sure #GPUs = #`embed` services = #`app` serivces.
+In the future, if there are multiple GPUs, I guess one should make sure #GPUs = #`embed` services = #`app` serivces,
+but this has not been implemented/tried yet.
 
 #### Misc
 Information on faiss-gpu:
