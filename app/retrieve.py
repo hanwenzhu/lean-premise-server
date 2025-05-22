@@ -5,6 +5,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 import logging
 import os
+import shutil
 import tarfile
 from typing import Optional, List, Dict, Union, Literal, Set, Tuple
 
@@ -16,20 +17,27 @@ from huggingface_hub import hf_hub_download
 
 from models import Corpus, PremiseSet, Premise
 
+logger = logging.getLogger("uvicorn.error")
+
 DATA_DIR = os.environ["DATA_DIR"]
 DATA_REPO = os.environ["DATA_REPO"]
 DATA_REVISION = os.environ["DATA_REVISION"]
 MODEL_ID = os.environ["MODEL_ID"]
 MODEL_REVISION = os.environ["MODEL_REVISION"]
+logger.info(f"Downloading Mathlib premises from {DATA_REPO} @ {DATA_REVISION}")
 premises_tar_gz = hf_hub_download(
     repo_id=DATA_REPO, repo_type="dataset", revision=DATA_REVISION,
     filename="premises.tar.gz",
     cache_dir=DATA_DIR,
 )
 MATHLIB_DIR = os.path.join(DATA_DIR, "Mathlib")
+logger.info(f"Extracting premises to {MATHLIB_DIR}")
+if os.path.exists(MATHLIB_DIR):
+    shutil.rmtree(MATHLIB_DIR)
 os.makedirs(MATHLIB_DIR, exist_ok=True)
 with tarfile.open(premises_tar_gz, "r:gz") as tar:
     tar.extractall(MATHLIB_DIR)
+logger.info(f"Downloading pre-computed embeddings from {DATA_REPO} @ {DATA_REVISION}")
 PRECOMPUTED_EMBEDDINGS_PATH = hf_hub_download(
     repo_id=DATA_REPO, repo_type="dataset", revision=DATA_REVISION,
     filename=os.path.join("embeddings", MODEL_ID.split("/")[1] + ".npy"),
@@ -49,8 +57,6 @@ MAX_CLIENT_BATCH_SIZE = int(os.environ["MAX_CLIENT_BATCH_SIZE"])
 MAX_K = int(os.environ["MAX_K"])
 DTYPE = os.environ["DTYPE"]
 assert DTYPE in ["float32", "float16"]
-
-logger = logging.getLogger("uvicorn.error")
 
 # Get corpus of premises, including their names and serialized expressions
 if os.path.isdir(MATHLIB_DIR):
@@ -196,7 +202,7 @@ async def embed(states: List[str], premises: List[str], batch_sequential: bool =
             premises_to_embed.append((i, premise))
 
     inputs = [EmbedInput(s, False) for s in states] + [EmbedInput(p, True) for _, p in premises_to_embed]
-    logger.info(f"Received {len(states) + len(premises)} inputs; embedding {len(inputs)} cache misses")
+    logger.info(f"Received {len(states) + len(premises)} inputs; embedding {len(inputs)} texts")
 
     batch_embeddings_list: List[np.ndarray]
     async with httpx.AsyncClient(timeout=EMBED_SERVICE_TIMEOUT) as client:
