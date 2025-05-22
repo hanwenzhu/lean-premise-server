@@ -1,18 +1,14 @@
-## Server setup
-
-Run
-
-```sh
-python download_data.py
-```
-
-which downloads Mathlib data in JSONL and pre-computed embeddings for them to `data`.
-
-This also means this should be re-ran for every data or model update.
-
 ## Deployment
 
-Set the relevant variables in `.env`. The important ones are: `TEI_VERSION` (for switching to CPU or different GPU backends for Hugging Face text-embeddings-inference); `DTYPE`, `EMBED_SERVICE_MAX_CONCURRENT_INPUTS` (see [.env]).
+Set the relevant variables in `.env`. The important ones are
+
+* `DATA_REVISION`: the revision (i.e. Lean version) of Mathlib premises to use (recall that the server indexes a set of fixed Mathlib premises while also allowing new/non-Mathlib premises to be uploaded)
+* `MODEL_ID` and `MODEL_REVISION`: the version of the model to use (by convention, `MODEL_REVISION` is the Mathlib Lean version that the model is trained on)
+* `TEI_VERSION` for switching to CPU or different GPU backends for Hugging Face text-embeddings-inference
+* `DTYPE` the precision to use when embedding
+* `EMBED_SERVICE_MAX_CONCURRENT_INPUTS` (see `.env`)
+
+See `.env` for other configurations.
 
 To start, run
 

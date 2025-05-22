@@ -11,12 +11,17 @@ import numpy as np
 import faiss
 import httpx
 from pydantic import BaseModel
+from huggingface_hub import snapshot_download
 
 from models import Corpus, PremiseSet, Premise
 
 DATA_DIR = os.environ["DATA_DIR"]
-MATHLIB_DIR = os.path.join(DATA_DIR, "Mathlib")
-PRECOMPUTED_EMBEDDINGS_PATH = os.environ["PRECOMPUTED_EMBEDDINGS_PATH"]
+DATA_REPO = os.environ["DATA_REPO"]
+DATA_REVISION = os.environ["DATA_REVISION"]
+MODEL_ID = os.environ["MODEL_ID"]
+MODEL_REVISION = os.environ["MODEL_REVISION"]
+MATHLIB_DIR = snapshot_download(DATA_REPO, repo_type="dataset", revision=DATA_REVISION, cache_dir=DATA_DIR)
+PRECOMPUTED_EMBEDDINGS_PATH = os.path.join(MATHLIB_DIR, "embeddings", MODEL_ID.split("/")[1] + ".npy")
 
 EMBED_SERVICE_URL = os.environ["EMBED_SERVICE_URL"]
 if os.environ["EMBED_SERVICE_TIMEOUT"]:
@@ -47,8 +52,7 @@ def build_index(use_precomputed=True) -> faiss.Index:
         corpus_embeddings = np.load(PRECOMPUTED_EMBEDDINGS_PATH)
     else:
         from sentence_transformers import SentenceTransformer
-        MODEL_ID = os.environ["MODEL_ID"]
-        model = SentenceTransformer(MODEL_ID)
+        model = SentenceTransformer(MODEL_ID, revision=MODEL_REVISION)
         corpus_embeddings = model.encode(
             [premise.to_string() for premise in corpus.premises],
             show_progress_bar=True,
