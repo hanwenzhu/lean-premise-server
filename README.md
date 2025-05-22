@@ -1,4 +1,10 @@
+A server that hosts a Lean premise selection service.
+
+The front-end Lean code is at [premise-selection](https://github.com/hanwenzhu/premise-selection).
+
 ## Deployment
+
+Before deployment, prepare the corpus of Mathlib premises and their embeddings, and the embedding model according to the [training script](https://github.com/hanwenzhu/LeanHammer-training).
 
 Set the relevant variables in `.env`. The important ones are
 
@@ -46,7 +52,8 @@ Most design decisions for the code are subject to improvement or refactoring. Th
 
 The assumption for this server is single GPU, single univorn worker (utilizing ASGI).
 In the future, if there are multiple GPUs, I guess one should make sure #GPUs = #`embed` services = #`app` serivces,
-but this has not been implemented/tried yet.
+and/or use some Docker swarm / Kubernetes setup,
+but this has not been tried yet.
 
 #### Misc
 Information on faiss-gpu:
