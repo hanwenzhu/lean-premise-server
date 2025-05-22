@@ -5,13 +5,14 @@ from collections import OrderedDict
 from dataclasses import dataclass
 import logging
 import os
+import tarfile
 from typing import Optional, List, Dict, Union, Literal, Set, Tuple
 
 import numpy as np
 import faiss
 import httpx
 from pydantic import BaseModel
-from huggingface_hub import snapshot_download
+from huggingface_hub import hf_hub_download
 
 from models import Corpus, PremiseSet, Premise
 
@@ -20,8 +21,20 @@ DATA_REPO = os.environ["DATA_REPO"]
 DATA_REVISION = os.environ["DATA_REVISION"]
 MODEL_ID = os.environ["MODEL_ID"]
 MODEL_REVISION = os.environ["MODEL_REVISION"]
-MATHLIB_DIR = snapshot_download(DATA_REPO, repo_type="dataset", revision=DATA_REVISION, cache_dir=DATA_DIR)
-PRECOMPUTED_EMBEDDINGS_PATH = os.path.join(MATHLIB_DIR, "embeddings", MODEL_ID.split("/")[1] + ".npy")
+premises_tar_gz = hf_hub_download(
+    repo_id=DATA_REPO, repo_type="dataset", revision=DATA_REVISION,
+    filename="premises.tar.gz",
+    cache_dir=DATA_DIR,
+)
+MATHLIB_DIR = os.path.join(DATA_DIR, "Mathlib")
+os.makedirs(MATHLIB_DIR, exist_ok=True)
+with tarfile.open(premises_tar_gz, "r:gz") as tar:
+    tar.extractall(MATHLIB_DIR)
+PRECOMPUTED_EMBEDDINGS_PATH = hf_hub_download(
+    repo_id=DATA_REPO, repo_type="dataset", revision=DATA_REVISION,
+    filename=os.path.join("embeddings", MODEL_ID.split("/")[1] + ".npy"),
+    cache_dir=DATA_DIR,
+)
 
 EMBED_SERVICE_URL = os.environ["EMBED_SERVICE_URL"]
 if os.environ["EMBED_SERVICE_TIMEOUT"]:
