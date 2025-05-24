@@ -1,6 +1,7 @@
-A server that hosts a Lean premise selection service.
+This is a server that hosts a Lean premise selection service.
 
-The front-end Lean code is at [premise-selection](https://github.com/hanwenzhu/premise-selection).
+The front-end Lean code is at [premise-selection](https://github.com/hanwenzhu/premise-selection). See its README for more context on this premise selector.
+This premise selection is developed as part of [LeanHammer](https://github.com/JOSHCLUNE/LeanHammer).
 
 ## Deployment
 
