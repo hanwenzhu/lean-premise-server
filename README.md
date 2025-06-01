@@ -25,6 +25,10 @@ docker compose up
 
 which runs a uvicorn server on `http://0.0.0.0:80`.
 
+#### Updating the model
+
+For each Lean revision, we may extract new Lean data and/or train a new model. After running `scripts/upload.py` in the [training script](https://github.com/hanwenzhu/LeanHammer-training), which uploads the data, model, and pre-computed embeddings to Hugging Face, please update the relevant entries in `.env` (usually `DATA_REVISION` and `MODEL_REVISION` to the Lean version used).
+
 ## Overview
 
 `docker-compose.yaml` contains two services:
