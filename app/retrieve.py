@@ -38,9 +38,10 @@ os.makedirs(MATHLIB_DIR, exist_ok=True)
 with tarfile.open(premises_tar_gz, "r:gz") as tar:
     tar.extractall(MATHLIB_DIR)
 logger.info(f"Downloading pre-computed embeddings from {DATA_REPO} @ {DATA_REVISION}")
+model_name = MODEL_ID.split("/")[1]
 PRECOMPUTED_EMBEDDINGS_PATH = hf_hub_download(
     repo_id=DATA_REPO, repo_type="dataset", revision=DATA_REVISION,
-    filename=os.path.join("embeddings", MODEL_ID.split("/")[1] + ".npy"),
+    filename=os.path.join("embeddings", f"{model_name}-{MODEL_REVISION}.npy"),
     cache_dir=DATA_DIR,
 )
 
