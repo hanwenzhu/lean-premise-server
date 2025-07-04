@@ -14,6 +14,8 @@ async def retrieve(request: RetrievalRequest):
         return []
     if request.k > MAX_K:
         request.k = MAX_K
+    if request.new_premises is None:
+        request.new_premises = []
     if len(request.new_premises) > MAX_NEW_PREMISES:
         request.new_premises = request.new_premises[:MAX_NEW_PREMISES]
 

@@ -105,9 +105,17 @@ class NewPremise(BaseModel):
 
 class RetrievalRequest(BaseModel):
     state: str  # str | List[str] is technically possible
-    imported_modules: Optional[List[str]] = None  # Legacy support, TODO remove
-    local_premises: List[str | int]
-    new_premises: List[NewPremise]
+    """The pretty-printed goal using `Meta.ppGoal`."""
+    imported_modules: Optional[List[str]] = None
+    """Deprecated."""
+    local_premises: Optional[List[str | int]] = None
+    """
+    The list of indexes or names of local premises in the context.
+    The indexes refer to the index in the list obtained from /indexed-premises.
+    If not specified, use all premises from /indexed-premises on the server.
+    """
+    new_premises: Optional[List[NewPremise]] = None
+    """List of new premises in the context."""
     k: int
 
 
@@ -269,7 +277,7 @@ async def retrieve_premises_core(states: List[str], k: int, new_premises: List[N
 async def retrieve_premises(
     states: Union[str, List[str]],
     imported_modules: Optional[List[str]],
-    local_premises: List[str | int],
+    local_premises: Optional[List[str | int]],
     new_premises: List[NewPremise],
     k: int
 ):
@@ -295,15 +303,18 @@ async def retrieve_premises(
         raise ValueError(f"{len(new_premises)} new premises uploaded, exceeding maximum ({MAX_NEW_PREMISES})")
 
     # Add local_premises to accessible premises
-    for name in local_premises:
-        # A new version of the client side optimizes by only sending the index
-        # Here we allow both versions
-        if isinstance(name, int) and 0 <= name < len(corpus.unfiltered_premises):
-            name = corpus.unfiltered_premises[name].name
-        if name in corpus.name2premise:
-            accessible_premises.add(name)
-        else:
-            continue  # not raising an error, because the supplied local premises are unfiltered, so might not be in corpus
+    if local_premises is None:
+        accessible_premises = set(corpus.name2premise)
+    else:
+        for name in local_premises:
+            # A new version of the client side optimizes by only sending the index
+            # Here we allow both versions
+            if isinstance(name, int) and 0 <= name < len(corpus.unfiltered_premises):
+                name = corpus.unfiltered_premises[name].name
+            if name in corpus.name2premise:
+                accessible_premises.add(name)
+            else:
+                continue  # not raising an error, because the supplied local premises are unfiltered, so might not be in corpus
 
     # Remove user-uploaded new premises from accessible set, because they override the server-side signature
     for premise_data in new_premises:
