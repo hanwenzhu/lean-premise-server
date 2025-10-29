@@ -1,0 +1,10 @@
+services:
+  embed:
+    image: ghcr.io/huggingface/text-embeddings-inference:cuda-latest
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

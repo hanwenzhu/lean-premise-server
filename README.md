@@ -5,25 +5,41 @@ This premise selection is developed as part of [LeanHammer](https://github.com/J
 
 ## Deployment
 
-Before deployment, prepare the corpus of Mathlib premises and their embeddings, and the embedding model according to the [training script](https://github.com/hanwenzhu/LeanHammer-training).
-
-Set the relevant variables in `.env`. The important ones are
-
-* `DATA_REVISION`: the revision (i.e. Lean version) of Mathlib premises to use (recall that the server indexes a set of fixed Mathlib premises while also allowing new/non-Mathlib premises to be uploaded)
-* `MODEL_ID` and `MODEL_REVISION`: the version of the model to use (by convention, `MODEL_REVISION` is the Mathlib Lean version that the model is trained on)
-* `TEI_VERSION` for switching to CPU or different GPU backends for Hugging Face text-embeddings-inference
-* `DTYPE` the precision to use when embedding
-* `EMBED_SERVICE_MAX_CONCURRENT_INPUTS` (see `.env`)
-
-See `.env` for other configurations.
-
-To start, run
+To start the server on a **GPU**, run:
 
 ```sh
+docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up
+```
+
+To start the server on a **CPU**, run:
+
+```sh
+# This prevents out-of-memory errors but sacrifices speed
+export MAX_BATCH_TOKENS=16384
 docker compose up
 ```
 
-which runs a uvicorn server on `http://0.0.0.0:80`.
+These commands start a uvicorn server at `0.0.0.0:80`.
+
+To stop the server, you may use:
+
+```sh
+docker compose down
+```
+
+By default, the Lean premise server will use our periodically extracted data and trained model on Hugging Face, such as [l3lab/lean-premises](https://huggingface.com/datasets/l3lab/lean-premises). (If desired, you may also prepare your own corpus of Mathlib premises and their embeddings, and the embedding model according to the [training script](https://github.com/hanwenzhu/LeanHammer-training), and then specify your corpus in `.env`.)
+
+The configuration for the server is in `.env`. Important variables include:
+
+| Variable | Description |
+|----------|-------------|
+| `PORT` | The port on `0.0.0.0` for the server to be deployed (default 80) |
+| `DATA_REVISION` | The Lean version of Mathlib premises to use (default newest; recall that the server indexes a set of fixed Mathlib premises while also allowing new/non-Mathlib premises to be uploaded) |
+| `MODEL_ID` and `MODEL_REVISION` | The version of the model to use (default newest; by convention, `MODEL_REVISION` is the Mathlib Lean version that the model is trained on) |
+| `DTYPE` | The precision to use when embedding (trades off between speed and quality) |
+| `MAX_BATCH_TOKENS` | The maximum number of tokens in a batch (trades off between memory and speed). Lower this if you run into OOM issues or error code 137. |
+| `MAX_NEW_PREMISES` | The maximum number of new premises the user can upload (trades off between speed and usability) |
+| `EMBED_SERVICE_MAX_CONCURRENT_INPUTS` | Maximum number of concurrent inputs sent to embedding service (rate limiter) |
 
 #### Updating the model
 
@@ -45,7 +61,7 @@ relays to `embed` the requests of new premises it has not seen before.
 `app` also maintains a rate-limiter via
 `EMBED_SERVICE_MAX_CONCURRENT_INPUTS` so it doesn't send too many requests to `embed`.
 
-## Development
+## Design choices
 
 Most design decisions for the code are subject to improvement or refactoring. These include but are not limited to:
 * Choice of using FAISS (CPU)

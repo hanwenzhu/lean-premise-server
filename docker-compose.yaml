@@ -1,6 +1,7 @@
 services:
   embed:
-    image: ghcr.io/huggingface/text-embeddings-inference:${TEI_VERSION}
+    platform: linux/amd64
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-latest
     ports:
       - "8080:80"
     environment:
@@ -10,19 +11,14 @@ services:
       - MAX_BATCH_TOKENS=${MAX_BATCH_TOKENS}
       - MAX_CLIENT_BATCH_SIZE=${MAX_CLIENT_BATCH_SIZE}
       - MAX_CONCURRENT_REQUESTS=${MAX_CONCURRENT_REQUESTS}
+      - LOG_LEVEL=DEBUG
     volumes:
       - ./data:/data
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+
   app:
     build: ./app
     ports:
-      - "0.0.0.0:80:8000"
+      - "0.0.0.0:${PORT}:8000"
     depends_on:
       - embed
     environment:
