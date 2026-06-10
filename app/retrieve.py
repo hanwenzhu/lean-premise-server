@@ -107,12 +107,22 @@ class RetrievalRequest(BaseModel):
     state: str  # str | List[str] is technically possible
     """The pretty-printed goal using `Meta.ppGoal`."""
     imported_modules: Optional[List[str]] = None
-    """Deprecated."""
+    """
+    The list of imported (and transitively imported) files, i.e., the set of files
+    that the current environment has access to. If not specified, use the
+    local_premises field to determine the set of available premises. If neither
+    imported_modules nor local_premises are specified, use all premises on the server.
+
+    TODO: Modify this field to have type Optional[List[str | int]] and support using
+    the index in the list obtained from /indexed-modules.
+    """
     local_premises: Optional[List[str | int]] = None
     """
     The list of indexes or names of local premises in the context.
     The indexes refer to the index in the list obtained from /indexed-premises.
-    If not specified, use all premises from /indexed-premises on the server.
+    If not specified, determine the set of available premises from the imported_modules
+    field. If neither imported_modules nor local_premises are specified, use all premises
+    on the server.
     """
     new_premises: Optional[List[NewPremise]] = None
     """List of new premises in the context."""
@@ -239,22 +249,26 @@ async def embed(states: List[str], premises: List[str], batch_sequential: bool =
     return state_embeddings, premise_embeddings
 
 
-async def retrieve_premises_core(states: List[str], k: int, new_premises: List[NewPremise], **kwargs):
+async def retrieve_premises_core(states: List[str], k: int, new_premises: List[NewPremise], search_index: bool = True, **kwargs):
     # Embed states and new premises
     new_premise_decls = [premise_data.decl for premise_data in new_premises]
     state_embeddings, new_premise_embeddings = await embed(states, new_premise_decls)
 
     # Retrieve premises from indexed premises
-    scoress, indicess = index.search(state_embeddings, k, **kwargs)  # type: ignore
-    scored_indexed_premises = [
-        [
-            # TODO: make this a class
-            {"score": score.item(), "name": corpus.premises[i].name}
-            for score, i in zip(scores, indices)
-            if i >= 0  # FAISS returns -1 with `sel`
+    if search_index:
+        scoress, indicess = index.search(state_embeddings, k, **kwargs)  # type: ignore
+        scored_indexed_premises = [
+            [
+                # TODO: make this a class
+                {"score": score.item(), "name": corpus.premises[i].name}
+                for score, i in zip(scores, indices)
+                if i >= 0  # FAISS returns -1 with `sel`
+            ]
+            for scores, indices in zip(scoress, indicess)
         ]
-        for scores, indices in zip(scoress, indicess)
-    ]
+    else:
+        # No indexed premises are accessible; only new_premises can be returned
+        scored_indexed_premises = [[] for _ in states]
 
     # Rank new premises
     new_scoress = np.matmul(state_embeddings, new_premise_embeddings.T)
@@ -282,30 +296,30 @@ async def retrieve_premises(
     k: int
 ):
     """Retrieve premises from all indexed premises in:
-    indexed premises in local_premises + unindexed premises in new_premises.
+    indexed premises in imported_modules + indexed premises in local_premises
+    + unindexed premises in new_premises.
+    If neither imported_modules nor local_premises is given, all indexed premises are eligible.
 
     In case of duplicate names, the signature in `new_premises` overrides the signature indexed on the server.
     """
     if k > MAX_K:
         raise ValueError(f"value of k ({k}) exceeds maximum ({MAX_K})")
 
-    # Accessible premises from the state, starting from imported modules
-    accessible_premises: Set[str] = set()
-
-    # Legacy support, TODO remove
-    if imported_modules is not None:
-        imported_modules_set = set(imported_modules)
-        for premise in corpus.premises:
-            if premise.module in imported_modules_set:
-                accessible_premises.add(premise.name)
-
     if len(new_premises) > MAX_NEW_PREMISES:
         raise ValueError(f"{len(new_premises)} new premises uploaded, exceeding maximum ({MAX_NEW_PREMISES})")
 
+    # Accessible premises from the state, starting from imported modules
+    accessible_premises: Set[str] = set()
+
+    # Add premises defined in imported modules to accessible premises
+    if imported_modules is not None:
+        for imported_module in imported_modules:
+            module = imported_module.removesuffix(".lean").replace("/", ".")
+            # Unknown modules are silently ignored
+            accessible_premises.update(corpus.module_to_premises.get(module, ()))
+
     # Add local_premises to accessible premises
-    if local_premises is None:
-        accessible_premises = set(corpus.name2premise)
-    else:
+    if local_premises is not None:
         for name in local_premises:
             # A new version of the client side optimizes by only sending the index
             # Here we allow both versions
@@ -316,24 +330,31 @@ async def retrieve_premises(
             else:
                 continue  # not raising an error, because the supplied local premises are unfiltered, so might not be in corpus
 
+    # Set accessible_premises to all indexed premises if neither imported_modules nor local_premises was set
+    if imported_modules is None and local_premises is None:
+        # Neither imported_modules nor local_premises given: all indexed premises are accessible
+        accessible_premises = set(corpus.name2premise)
+
     # Remove user-uploaded new premises from accessible set, because they override the server-side signature
     for premise_data in new_premises:
-        name = premise_data.name
-        if name in corpus.name2premise:
-            # User-uploaded premise overrides server-side premise
-            accessible_premises.remove(name)
+        # discard, not remove: the new premise may shadow an indexed premise outside the accessible set
+        accessible_premises.discard(premise_data.name)
 
     accessible_premise_idxs = [corpus.name2idx[name] for name in accessible_premises]
-    # NOTE: the types of faiss Selector, SearchParameters, and Index should align
-    sel = faiss.IDSelectorArray(accessible_premise_idxs)  # type: ignore
     kwargs = {}
-    kwargs["params"] = faiss.SearchParameters(sel=sel)  # type: ignore
+    # Skip the index search entirely if no indexed premise is accessible
+    # (not relying on FAISS to handle an empty selector)
+    search_index = len(accessible_premise_idxs) > 0
+    if search_index:
+        # NOTE: the types of faiss Selector, SearchParameters, and Index should align
+        sel = faiss.IDSelectorArray(accessible_premise_idxs)  # type: ignore
+        kwargs["params"] = faiss.SearchParameters(sel=sel)  # type: ignore
 
     if isinstance(states, str):
-        premises = await retrieve_premises_core([states], k, new_premises, **kwargs)
+        premises = await retrieve_premises_core([states], k, new_premises, search_index=search_index, **kwargs)
         return premises[0]
     else:
-        premises = await retrieve_premises_core(states, k, new_premises, **kwargs)
+        premises = await retrieve_premises_core(states, k, new_premises, search_index=search_index, **kwargs)
         return premises
 
 # original_modules: List[str] = corpus.modules.copy()
