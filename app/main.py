@@ -1,12 +1,24 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 import uvicorn
 import httpx
+import logging
+import time
 
 from models import SimplePremise
 from retrieve import corpus, retrieve_premises, add_premise_to_corpus_index, added_premises, MAX_NEW_PREMISES, MAX_K, RetrievalRequest, EmbedServiceOverloaded
 
+logger = logging.getLogger("uvicorn.error")
+
 app = FastAPI()
+
+@app.middleware("http")
+async def log_request_duration(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+    logger.info(f"{request.method} {request.url.path} took {elapsed * 1000:.1f} ms")
+    return response
 
 @app.post("/retrieve")
 async def retrieve(request: RetrievalRequest):

@@ -106,15 +106,13 @@ class NewPremise(BaseModel):
 class RetrievalRequest(BaseModel):
     state: str  # str | List[str] is technically possible
     """The pretty-printed goal using `Meta.ppGoal`."""
-    imported_modules: Optional[List[str]] = None
+    imported_modules: Optional[List[str | int]] = None
     """
     The list of imported (and transitively imported) files, i.e., the set of files
-    that the current environment has access to. If not specified, use the
+    that the current environment has access to. Each entry is either a module name
+    or an index in the list obtained from /indexed-modules. If not specified, use the
     local_premises field to determine the set of available premises. If neither
     imported_modules nor local_premises are specified, use all premises on the server.
-
-    TODO: Modify this field to have type Optional[List[str | int]] and support using
-    the index in the list obtained from /indexed-modules.
     """
     local_premises: Optional[List[str | int]] = None
     """
@@ -290,7 +288,7 @@ async def retrieve_premises_core(states: List[str], k: int, new_premises: List[N
 
 async def retrieve_premises(
     states: Union[str, List[str]],
-    imported_modules: Optional[List[str]],
+    imported_modules: Optional[List[str | int]],
     local_premises: Optional[List[str | int]],
     new_premises: List[NewPremise],
     k: int
@@ -314,7 +312,15 @@ async def retrieve_premises(
     # Add premises defined in imported modules to accessible premises
     if imported_modules is not None:
         for imported_module in imported_modules:
-            module = imported_module.removesuffix(".lean").replace("/", ".")
+            # A new version of the client side optimizes by only sending the index
+            # Here we allow both versions
+            if isinstance(imported_module, int):
+                # Out-of-range indexes are silently ignored, like unknown modules
+                if not (0 <= imported_module < len(corpus.modules)):
+                    continue
+                module = corpus.modules[imported_module]
+            else:
+                module = imported_module.removesuffix(".lean").replace("/", ".")
             # Unknown modules are silently ignored
             accessible_premises.update(corpus.module_to_premises.get(module, ()))
 
