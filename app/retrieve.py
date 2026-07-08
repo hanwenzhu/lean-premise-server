@@ -124,6 +124,17 @@ class RetrievalRequest(BaseModel):
     """
     new_premises: Optional[List[NewPremise]] = None
     """List of new premises in the context."""
+    caller_in_module_system: bool = False
+    """Whether the premise selector is being called from inside Lean's module system.
+    Module-system visibility semantics are applied only when this is True AND the
+    candidate premise's defining module is also in the module system. Defaults to
+    False (non-module semantics), preserving behavior for existing callers."""
+    imported_all_modules: Optional[List[str | int]] = None
+    """Subset of imported modules that the caller imported with `import all`
+    (granting access to those modules' unexposed public constant bodies). Entries
+    use the same name/index convention as `imported_modules`. Modules imported with
+    a plain or `public import` stay in `imported_modules` only. Only consulted when
+    `caller_in_module_system` is True."""
     k: int
 
 
@@ -286,17 +297,55 @@ async def retrieve_premises_core(states: List[str], k: int, new_premises: List[N
 
     return scored_premises
 
+def _resolve_module_names(modules: Optional[List[str | int]]) -> Set[str]:
+    """Resolve a list of module names/indices (as in `imported_modules`) to a set
+    of canonical module names. Unknown names / out-of-range indices are ignored."""
+    resolved: Set[str] = set()
+    if modules is None:
+        return resolved
+    for module in modules:
+        if isinstance(module, int):
+            if 0 <= module < len(corpus.modules):
+                resolved.add(corpus.modules[module])
+        else:
+            resolved.add(module.removesuffix(".lean").replace("/", "."))
+    return resolved
+
+
+def _is_visible(name: str, caller_in_module_system: bool, import_all_modules: Set[str]) -> bool:
+    """Module-system visibility filter. Every corpus premise is nonprivate, so:
+      - non-module caller, or premise outside the module system -> always eligible;
+      - module caller + module premise: theorems are always eligible (public,
+        type available); a (non-theorem) constant is eligible iff its body is
+        available -- it is exposed, or its module was imported with `import all`.
+    """
+    premise = corpus.name2premise.get(name)
+    if premise is None:
+        return True
+    if not (caller_in_module_system and premise.in_module_system):
+        return True
+    if premise.kind == "theorem":
+        return True
+    return premise.is_exposed or (premise.module in import_all_modules)
+
+
 async def retrieve_premises(
     states: Union[str, List[str]],
     imported_modules: Optional[List[str | int]],
     local_premises: Optional[List[str | int]],
     new_premises: List[NewPremise],
-    k: int
+    k: int,
+    caller_in_module_system: bool = False,
+    imported_all_modules: Optional[List[str | int]] = None,
 ):
     """Retrieve premises from all indexed premises in:
     indexed premises in imported_modules + indexed premises in local_premises
     + unindexed premises in new_premises.
     If neither imported_modules nor local_premises is given, all indexed premises are eligible.
+
+    When `caller_in_module_system` is True, an additional module-system visibility
+    filter is applied to indexed premises (see `_is_visible`); `imported_all_modules`
+    lists the modules imported with `import all`.
 
     In case of duplicate names, the signature in `new_premises` overrides the signature indexed on the server.
     """
@@ -340,6 +389,14 @@ async def retrieve_premises(
     if imported_modules is None and local_premises is None:
         # Neither imported_modules nor local_premises given: all indexed premises are accessible
         accessible_premises = set(corpus.name2premise)
+
+    # Additional module-system visibility filter (see _is_visible)
+    if caller_in_module_system:
+        import_all_modules = _resolve_module_names(imported_all_modules)
+        accessible_premises = {
+            name for name in accessible_premises
+            if _is_visible(name, caller_in_module_system, import_all_modules)
+        }
 
     # Remove user-uploaded new premises from accessible set, because they override the server-side signature
     for premise_data in new_premises:
