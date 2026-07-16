@@ -164,6 +164,15 @@ class Premise(BaseInfo):
     can_benchmark: bool
     """Premise can be used for benchmarking, for determining valid/test set"""
 
+    in_module_system: bool = False
+    """Whether this premise's defining module opted into Lean's module system."""
+
+    is_exposed: bool = False
+    """Module system only: whether this premise's body is in the public scope
+    (`@[expose]`). Always False outside the module system. Used by the /retrieve
+    visibility filter. There is intentionally no `is_private` field: private
+    declarations are never extracted, so every corpus premise is nonprivate."""
+
     nameless: bool = False
     """If true, the pretty-printed to_string will not contain the premise name."""
 
@@ -181,6 +190,9 @@ class Premise(BaseInfo):
             column=info["column"],
             is_prop=info["isProp"],
             can_benchmark=info["isHumanTheorem"],
+            # Safe defaults so older extractions (without these fields) still load.
+            in_module_system=info.get("inModuleSystem", False),
+            is_exposed=info.get("isExposed", False),
             nameless=nameless,
         )
 

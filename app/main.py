@@ -37,7 +37,9 @@ async def retrieve(request: RetrievalRequest):
             imported_modules=request.imported_modules,
             local_premises=request.local_premises,
             new_premises=request.new_premises,
-            k=request.k
+            k=request.k,
+            caller_in_module_system=request.caller_in_module_system,
+            imported_all_modules=request.imported_all_modules,
         )
     except httpx.HTTPError as e:
         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
